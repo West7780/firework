@@ -99,7 +99,7 @@ while True:
     #handle events
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
-            break
+            quit()
         if event.type == pygame.VIDEORESIZE:
             width,height = event.w,event.h
             pygame.display.set_mode((width,height),pygame.RESIZABLE)
