@@ -1,4 +1,5 @@
-import time,random,pygame
+import time,random,pygame,math,threading
+from queue import Queue
 
 def inputNumber(prompt = "",min1 = float("-Infinity"), max1 = float("Infinity") ):
     while True:
@@ -11,6 +12,10 @@ def inputNumber(prompt = "",min1 = float("-Infinity"), max1 = float("Infinity") 
         except:
             print("Please enter a number greater than",min1,"and less than",max1)
     
+numThreads = int(inputNumber("How many threads would you like to run? ", min1 = 1))
+
+print_lock = threading.Lock()
+
 fpsCap = int(inputNumber("What would you like the fps cap to be? (enter zero for infinity) ",0))
 
 elapsed = 0.1
@@ -18,6 +23,52 @@ elapsed = 0.1
 Gravity = (0,.01)
 
 pygame.init()
+
+width,height = 500,500
+pygame.display.init()
+pygame.display.set_mode((width,height),pygame.RESIZABLE)
+pygame.display.set_icon(pygame.Surface((32,32)))
+
+fireworks = []
+stars = []
+
+q = Queue()
+
+def threader():
+    while True:
+        try:
+            part = q.get(timeout = 0.05)
+            if part in fireworks:
+                processFirework(part)
+            elif part in stars:
+                processStar(part)
+            q.task_done()
+        except:
+            pass
+
+def processParticle(part):
+    part.show()
+    part.applyForce(Gravity)
+    part.update()
+
+def processFirework(part):
+    global stars
+    global fireworks
+    processParticle(part)
+    if part.vel[1] >= -1 or int(part.pos[0]) not in range(0,width) or int(part.pos[1]) not in range(0,height):
+        for x in range(0,random.randint(20,30)):
+            stars+= [particle(int(part.pos[0]),int(part.pos[1]),part.color,0.79)]
+            stars[len(stars)-1].applyForce((random.uniform(-0.5,0.5)+part.vel[0],random.uniform(-0.5,0.5)+part.vel[1]))
+        fireworks.remove(part)
+
+def processStar(part):
+    global stars
+    global fireworks
+    global width
+    global height
+    processParticle(part)
+    if int(part.pos[0]) not in range(0,width) or int(part.pos[1]) not in range(0,height):
+        stars.remove(part)
 
 def genNeon():
     nums = [random.randint(0,85),random.randint(85,170),random.randint(170,255)]
@@ -46,48 +97,23 @@ class particle():
     def show(self):
         pygame.draw.circle(pygame.display.get_surface(), self.color, (int(self.pos[0]),int(self.pos[1])), int(self.size))
 
-
-
-elapsed = 1
-
-Gravity = (0,.01)
-
-pygame.init()
-
-width,height = 500,500
-pygame.display.init()
-pygame.display.set_mode((width,height),pygame.RESIZABLE)
-pygame.display.set_icon(pygame.Surface((32,32)))
-
-fireworks = []
-stars = []
+#create threads
+for i in range(numThreads):
+            
+    t = threading.Thread(target=threader)
+    t.daemon = True
+    t.start()
 
 while True:
+    
     start = time.time()
     pygame.display.set_caption("Firework    Fireworks: "+str(len(fireworks))+"    Stars: "+str(len(stars))+"    FPS: "+str(1/elapsed))
     pygame.display.get_surface().fill((5,5,5),special_flags = pygame.BLEND_RGB_SUB)
 
-    for part in fireworks:
-        
-        part.show()
-        part.applyForce(Gravity)
-        part.update()
-        
-        if part.vel[1] >= -1 or int(part.pos[0]) not in range(0,width) or int(part.pos[1]) not in range(0,height):
-            for x in range(0,25):
-                stars+= [particle(int(part.pos[0]),int(part.pos[1]),part.color,0.79)]
-                stars[len(stars)-1].applyForce((random.uniform(-0.5,0.5)+part.vel[0],random.uniform(-0.5,0.5)+part.vel[1]))
-            fireworks.remove(part)
-    
-    for part in stars:
+    #fill queue with particles
+    for part in fireworks+stars:
 
-        part.show()
-        part.applyForce(Gravity)
-        part.update()
-        
-        if int(part.pos[0]) not in range(0,width) or int(part.pos[1]) not in range(0,height):
-            stars.remove(part)
-            pass
+        q.put(part, block=False)
     
     #create fireworks
     if random.randint(0,10) == 1:
@@ -99,10 +125,13 @@ while True:
     #handle events
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
-            break
+            q.join()
+            quit()
         if event.type == pygame.VIDEORESIZE:
             width,height = event.w,event.h
             pygame.display.set_mode((width,height),pygame.RESIZABLE)
+
+    q.join()
     
     end = time.time()
     elapsed = end - start
